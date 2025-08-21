@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MBE Multiple Choice Practice</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .lucide {
+            width: 1.25rem;
+            height: 1.25rem;
+            display: inline-block;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Lucide Icons as SVG components
+        const Clock = () => (
+            <svg className="lucide" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12,6 12,12 16,14"/>
+            </svg>
+        );
+
+        const CheckCircle = () => (
+            <svg className="lucide" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22,4 12,14.01 9,11.01"/>
+            </svg>
+        );
+
+        const XCircle = () => (
+            <svg className="lucide" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M15 9l-6 6M9 9l6 6"/>
+            </svg>
+        );
+
+        const RotateCcw = () => (
+            <svg className="lucide" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+        );
+
+        const Target = () => (
+            <svg className="lucide" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="6"/>
+                <circle cx="12" cy="12" r="2"/>
+            </svg>
+        );
+
+        const TrendingUp = () => (
+            <svg className="lucide" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <polyline points="22,7 13.5,15.5 8.5,10.5 2,17"/>
+                <polyline points="16,7 22,7 22,13"/>
+            </svg>
+        );
+
+        const MCQBarPrepSystem = () => {
+            const [currentView, setCurrentView] = useState('home');
+            const [selectedSubject, setSelectedSubject] = useState('');
+            const [selectedDifficulty, setSelectedDifficulty] = useState('');
+            const [selectedQuestionCount, setSelectedQuestionCount] = useState(10);
+            const [questions, setQuestions] = useState([]);
+            const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+            const [userAnswers, setUserAnswers] = useState({});
+            const [showResults, setShowResults] = useState(false);
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [timeLeft, setTimeLeft] = useState(0);
+            const [timerActive, setTimerActive] = useState(false);
+            const [practiceHistory, setPracticeHistory] = useState([]);
+
+            const subjects = [
+                { id: 'constitutional', name: 'Constitutional Law', topics: ['1st Amendment', 'Due Process', 'Equal Protection', 'Commerce Clause'] },
+                { id: 'contracts', name: 'Contracts', topics: ['Formation', 'Performance', 'Breach', 'Remedies'] },
+                { id: 'criminal', name: 'Criminal Law & Procedure', topics: ['Elements of Crimes', 'Defenses', '4th Amendment', '5th Amendment'] },
+                { id: 'evidence', name: 'Evidence', topics: ['Hearsay', 'Character Evidence', 'Privileges', 'Authentication'] },
+                { id: 'property', name: 'Real Property', topics: ['Estates', 'Future Interests', 'Landlord-Tenant', 'Recording Acts'] },
+                { id: 'torts', name: 'Torts', topics: ['Intentional Torts', 'Negligence', 'Strict Liability', 'Damages'] }
+            ];
+
+            const difficulties = [
+                { id: 'practice', name: 'Practice Level', description: 'Basic application of rules' },
+                { id: 'intermediate', name: 'Intermediate', description: 'Moderate complexity with exceptions' },
+                { id: 'mbe-level', name: 'MBE Level', description: 'Complex fact patterns with nuanced analysis' }
+            ];
+
+            const questionCounts = [5, 10, 15, 20, 25, 30];
+
+            // Timer effect
+            useEffect(() => {
+                let interval;
+                if (timerActive && timeLeft > 0) {
+                    interval = setInterval(() => {
+                        setTimeLeft(time => time - 1);
+                    }, 1000);
+                } else if (timeLeft === 0 && timerActive) {
+                    setTimerActive(false);
+                    finishQuiz();
+                }
+                return () => clearInterval(interval);
+            }, [timerActive, timeLeft]);
+
+            const formatTime = (seconds) => {
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            const generateQuestions = async () => {
+                setIsGenerating(true);
+                try {
+                    const subject = subjects.find(s => s.id === selectedSubject);
+                    const difficulty = difficulties.find(d => d.id === selectedDifficulty);
+                    
+                    // Call our server's API endpoint instead of calling Anthropic directly
+                    const response = await fetch('/api/generate-questions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            subject: subject.name,
+                            difficulty: difficulty.name,
+                            questionCount: selectedQuestionCount,
+                            topics: subject.topics
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to generate questions');
+                    }
+
+                    const questionsData = await response.json();
+                    setQuestions(questionsData);
+                    setCurrentView('quiz');
+                    setCurrentQuestionIndex(0);
+                    setUserAnswers({});
+                    setShowResults(false);
+                    
+                    // Set timer (1.8 minutes per question - MBE standard)
+                    setTimeLeft(selectedQuestionCount * 108);
+                } catch (error) {
+                    console.error("Error generating questions:", error);
+                    alert("Error generating questions. Please try again.");
+                }
+                setIsGenerating(false);
+            };
+
+            const selectAnswer = (questionId, answer) => {
+                setUserAnswers(prev => ({
+                    ...prev,
+                    [questionId]: answer
+                }));
+            };
+
+            const goToQuestion = (index) => {
+                setCurrentQuestionIndex(index);
+            };
+
+            const finishQuiz = () => {
+                setTimerActive(false);
+                setShowResults(true);
+                
+                const correct = questions.filter(q => userAnswers[q.id] === q.correctAnswer).length;
+                const percentage = Math.round((correct / questions.length) * 100);
+                
+                const newSession = {
+                    date: new Date().toLocaleDateString(),
+                    subject: subjects.find(s => s.id === selectedSubject)?.name,
+                    difficulty: selectedDifficulty,
+                    totalQuestions: questions.length,
+                    correct: correct,
+                    percentage: percentage,
+                    timeSpent: (selectedQuestionCount * 108) - timeLeft
+                };
+                setPracticeHistory(prev => [...prev, newSession]);
+            };
+
+            const getScoreColor = (percentage) => {
+                if (percentage >= 75) return 'text-green-600';
+                if (percentage >= 60) return 'text-yellow-600';
+                return 'text-red-600';
+            };
+
+            const getPerformanceLevel = (percentage) => {
+                if (percentage >= 85) return 'Excellent';
+                if (percentage >= 75) return 'Good';
+                if (percentage >= 65) return 'Pass';
+                if (percentage >= 50) return 'Below Average';
+                return 'Needs Improvement';
+            };
+
+            if (currentView === 'home') {
+                return (
+                    <div className="max-w-6xl mx-auto p-6 bg-white min-h-screen">
+                        <div className="text-center mb-8">
+                            <h1 className="text-4xl font-bold text-gray-900 mb-2">MBE Multiple Choice Practice</h1>
+                            <p className="text-xl text-gray-600">Generate Realistic Bar Exam Questions with Instant Feedback</p>
+                        </div>
+
+                        <div className="grid md:grid-cols-3 gap-8 mb-8">
+                            <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
+                                <h2 className="text-2xl font-semibold mb-4 text-blue-900">Select Subject</h2>
+                                <div className="space-y-3">
+                                    {subjects.map(subject => (
+                                        <div key={subject.id} className="relative">
+                                            <input
+                                                type="radio"
+                                                id={subject.id}
+                                                name="subject"
+                                                value={subject.id}
+                                                onChange={(e) => setSelectedSubject(e.target.value)}
+                                                className="absolute opacity-0"
+                                            />
+                                            <label 
+                                                htmlFor={subject.id} 
+                                                className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                                    selectedSubject === subject.id ? 'border-blue-500 bg-blue-100' : 'border-gray-200 hover:border-gray-300'
+                                                }`}
+                                            >
+                                                <div className="font-medium text-gray-900">{subject.name}</div>
+                                                <div className="text-sm text-gray-600">{subject.topics.join(', ')}</div>
+                                            </label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-green-50 p-6 rounded-lg border border-green-200">
+                                <h2 className="text-2xl font-semibold mb-4 text-green-900">Select Difficulty</h2>
+                                <div className="space-y-3">
+                                    {difficulties.map(difficulty => (
+                                        <div key={difficulty.id} className="relative">
+                                            <input
+                                                type="radio"
+                                                id={difficulty.id}
+                                                name="difficulty"
+                                                value={difficulty.id}
+                                                onChange={(e) => setSelectedDifficulty(e.target.value)}
+                                                className="absolute opacity-0"
+                                            />
+                                            <label 
+                                                htmlFor={difficulty.id} 
+                                                className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                                    selectedDifficulty === difficulty.id ? 'border-green-500 bg-green-100' : 'border-gray-200 hover:border-gray-300'
+                                                }`}
+                                            >
+                                                <div className="font-medium text-gray-900">{difficulty.name}</div>
+                                                <div className="text-sm text-gray-600">{difficulty.description}</div>
+                                            </label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-purple-50 p-6 rounded-lg border border-purple-200">
+                                <h2 className="text-2xl font-semibold mb-4 text-purple-900">Question Count</h2>
+                                <div className="space-y-3">
+                                    {questionCounts.map(count => (
+                                        <div key={count} className="relative">
+                                            <input
+                                                type="radio"
+                                                id={`count-${count}`}
+                                                name="questionCount"
+                                                value={count}
+                                                checked={selectedQuestionCount === count}
+                                                onChange={(e) => setSelectedQuestionCount(Number(e.target.value))}
+                                                className="absolute opacity-0"
+                                            />
+                                            <label 
+                                                htmlFor={`count-${count}`} 
+                                                className={`block p-3 border-2 rounded-lg cursor-pointer transition-all text-center ${
+                                                    selectedQuestionCount === count ? 'border-purple-500 bg-purple-100' : 'border-gray-200 hover:border-gray-300'
+                                                }`}
+                                            >
+                                                <div className="font-medium text-gray-900">{count} Questions</div>
+                                                <div className="text-sm text-purple-600">
+                                                    ~{Math.round(count * 1.8)} minutes
+                                                </div>
+                                            </label>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="text-center mb-8">
+                            <button
+                                onClick={generateQuestions}
+                                disabled={!selectedSubject || !selectedDifficulty || isGenerating}
+                                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold text-lg disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
+                            >
+                                {isGenerating ? (
+                                    <>
+                                        <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                                        Generating Questions...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Target className="inline w-5 h-5 mr-2" />
+                                        Generate Practice Quiz
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
+                        {practiceHistory.length > 0 && (
+                            <div className="bg-gray-50 p-6 rounded-lg">
+                                <h3 className="text-xl font-semibold mb-4 flex items-center">
+                                    <TrendingUp className="w-5 h-5 mr-2" />
+                                    Your Practice History
+                                </h3>
+                                <div className="grid md:grid-cols-3 gap-4">
+                                    {practiceHistory.slice(-6).map((session, index) => (
+                                        <div key={index} className="bg-white p-4 rounded border">
+                                            <div className="font-medium">{session.subject}</div>
+                                            <div className="text-sm text-gray-600">{session.difficulty} • {session.date}</div>
+                                            <div className="text-sm text-gray-600">{session.totalQuestions} questions</div>
+                                            <div className={`text-lg font-bold ${getScoreColor(session.percentage)}`}>
+                                                {session.correct}/{session.totalQuestions} ({session.percentage}%)
+                                            </div>
+                                            <div className="text-sm text-gray-500">
+                                                {getPerformanceLevel(session.percentage)}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            if (currentView === 'quiz' && !showResults) {
+                const currentQuestion = questions[currentQuestionIndex];
+                const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+                
+                return (
+                    <div className="max-w-4xl mx-auto p-6 bg-white min-h-screen">
+                        <div className="mb-6">
+                            <button
+                                onClick={() => setCurrentView('home')}
+                                className="text-blue-600 hover:text-blue-800 mb-4"
+                            >
+                                ← Back to Home
+                            </button>
+                            
+                            <div className="flex justify-between items-center mb-4">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-900">
+                                        Question {currentQuestionIndex + 1} of {questions.length}
+                                    </h1>
+                                    <div className="text-gray-600">
+                                        {subjects.find(s => s.id === selectedSubject)?.name}
+                                    </div>
+                                </div>
+                                
+                                <div className="flex items-center space-x-4">
+                                    <div className={`text-lg font-bold ${timeLeft <= 300 ? 'text-red-600' : 'text-gray-700'}`}>
+                                        <Clock className="inline w-5 h-5 mr-1" />
+                                        {formatTime(timeLeft)}
+                                    </div>
+                                    {!timerActive && (
+                                        <button
+                                            onClick={() => setTimerActive(true)}
+                                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                                        >
+                                            Start Timer
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
+                                <div 
+                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${progress}%` }}
+                                ></div>
+                            </div>
+                        </div>
+
+                        {currentQuestion && (
+                            <div className="space-y-6">
+                                <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
+                                    <div className="text-sm text-blue-600 font-medium mb-2">
+                                        Topic: {currentQuestion.topic}
+                                    </div>
+                                    <div className="text-gray-800 leading-relaxed whitespace-pre-wrap">
+                                        {currentQuestion.question}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {Object.entries(currentQuestion.choices).map(([letter, choice]) => (
+                                        <label
+                                            key={letter}
+                                            className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                                userAnswers[currentQuestion.id] === letter
+                                                    ? 'border-blue-500 bg-blue-50'
+                                                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            <input
+                                                type="radio"
+                                                name={`question-${currentQuestion.id}`}
+                                                value={letter}
+                                                checked={userAnswers[currentQuestion.id] === letter}
+                                                onChange={() => selectAnswer(currentQuestion.id, letter)}
+                                                className="sr-only"
+                                            />
+                                            <div className="flex items-start">
+                                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-3 mt-0.5 ${
+                                                    userAnswers[currentQuestion.id] === letter
+                                                        ? 'border-blue-500 bg-blue-500 text-white'
+                                                        : 'border-gray-300'
+                                                }`}>
+                                                    <span className="text-sm font-medium">{letter}</span>
+                                                </div>
+                                                <span className="text-gray-800">{choice}</span>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+
+                                <div className="flex justify-between items-center pt-6">
+                                    <button
+                                        onClick={() => setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1))}
+                                        disabled={currentQuestionIndex === 0}
+                                        className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                                    >
+                                        Previous
+                                    </button>
+
+                                    <div className="flex space-x-2">
+                                        {questions.map((_, index) => (
+                                            <button
+                                                key={index}
+                                                onClick={() => goToQuestion(index)}
+                                                className={`w-8 h-8 rounded text-sm font-medium ${
+                                                    index === currentQuestionIndex
+                                                        ? 'bg-blue-600 text-white'
+                                                        : userAnswers[questions[index].id]
+                                                        ? 'bg-green-100 text-green-700 border border-green-300'
+                                                        : 'bg-gray-100 text-gray-600 border border-gray-300'
+                                                }`}
+                                            >
+                                                {index + 1}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {currentQuestionIndex === questions.length - 1 ? (
+                                        <button
+                                            onClick={finishQuiz}
+                                            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+                                        >
+                                            Finish Quiz
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => setCurrentQuestionIndex(Math.min(questions.length - 1, currentQuestionIndex + 1))}
+                                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                                        >
+                                            Next
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            if (showResults) {
+                const correct = questions.filter(q => userAnswers[q.id] === q.correctAnswer).length;
+                const percentage = Math.round((correct / questions.length) * 100);
+                
+                return (
+                    <div className="max-w-4xl mx-auto p-6 bg-white min-h-screen">
+                        <div className="mb-6">
+                            <button
+                                onClick={() => setCurrentView('home')}
+                                className="text-blue-600 hover:text-blue-800 mb-4"
+                            >
+                                ← Back to Home
+                            </button>
+                            
+                            <h1 className="text-3xl font-bold text-gray-900 mb-2">Quiz Results</h1>
+                            <p className="text-gray-600">
+                                {subjects.find(s => s.id === selectedSubject)?.name} • {difficulties.find(d => d.id === selectedDifficulty)?.name}
+                            </p>
+                        </div>
+
+                        <div className="bg-gray-50 p-6 rounded-lg border mb-6">
+                            <div className="text-center">
+                                <div className={`text-6xl font-bold ${getScoreColor(percentage)}`}>
+                                    {correct}/{questions.length}
+                                </div>
+                                <div className={`text-2xl font-semibold ${getScoreColor(percentage)}`}>
+                                    {percentage}% - {getPerformanceLevel(percentage)}
+                                </div>
+                                <div className="text-gray-600 mt-2">
+                                    Time: {formatTime((selectedQuestionCount * 108) - timeLeft)} / {formatTime(selectedQuestionCount * 108)}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-semibold">Question Review</h2>
+                            
+                            {questions.map((question, index) => {
+                                const userAnswer = userAnswers[question.id];
+                                const isCorrect = userAnswer === question.correctAnswer;
+                                
+                                return (
+                                    <div key={question.id} className="border rounded-lg p-6">
+                                        <div className="flex items-center mb-3">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                                                isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                            }`}>
+                                                {isCorrect ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                                            </div>
+                                            <h3 className="text-lg font-semibold">Question {index + 1}</h3>
+                                            <span className="ml-auto text-sm text-gray-600">{question.topic}</span>
+                                        </div>
+                                        
+                                        <div className
